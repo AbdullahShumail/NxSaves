@@ -1,0 +1,81 @@
+# Checks the iOS app on a GitHub macOS runner. Needs no Apple account or secrets.
+#   1. analyze + unit tests
+#   2. unsigned release build (the same compile the TestFlight workflow signs)
+#   3. starts an NxSaves server on the runner and runs integration_test/server_flow_test.dart on
+#      the iOS simulator: paste a link, the server downloads it, the file is saved in Documents.
+# Simulator screenshots and the server log are uploaded as the "ios-check" artifact.
+# Run it from the Actions tab ("Run workflow"); macOS minutes count 10x on private repos.
+name: iOS check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode on the runner
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc' | sort -V | tail -1)"
+          xcodebuild -version
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.2
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Analyze and unit tests
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test test/
+
+      - name: Unsigned release build
+        run: flutter build ios --release --no-codesign
+
+      - name: Start an NxSaves server on the runner
+        run: |
+          python -m venv server/.venv
+          server/.venv/bin/pip install --quiet -r server/requirements.txt
+          NXSAVES_TOKEN=ci-token NXSAVES_DATA="$RUNNER_TEMP/nxsaves" \
+            nohup server/.venv/bin/python server/nxsaves_server.py --port 8765 > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf -H "Authorization: Bearer ci-token" http://127.0.0.1:8765/api/health && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/server.log"; exit 1
+
+      - name: Boot an iPhone simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          print(next(d['udid'] for runtime, ds in sorted(devices.items(), reverse=True) if 'iOS' in runtime
+                     for d in ds if d['name'].startswith('iPhone')))")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: End-to-end test on the simulator
+        run: |
+          mkdir -p "$RUNNER_TEMP/shots"
+          ( i=0; while true; do sleep 8; i=$((i+1)); xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$(printf %03d $i).png" >/dev/null 2>&1; done ) &
+          flutter test integration_test/server_flow_test.dart -d "$UDID" \
+            --dart-define=NXSAVES_TEST_SERVER=http://127.0.0.1:8765 \
+            --dart-define=NXSAVES_TEST_TOKEN=ci-token
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-check
+          path: |
+            ${{ runner.temp }}/shots
+            ${{ runner.temp }}/server.log

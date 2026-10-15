@@ -1,0 +1,4 @@
+# yt-dlp with its recommended extras; curl-cffi adds browser impersonation, which TikTok needs.
+yt-dlp[default,curl-cffi]
+fastapi>=0.115
+uvicorn>=0.30
