@@ -57,14 +57,14 @@ class LocalEngine implements DownloadEngine {
 
   Future<void> _awaitReady() => _ready.future;
 
-  /// Downloads the newest yt-dlp release (sites change often; updates fix most breakages).
+  /// Updates the downloader to its newest release (sites change often; updates fix most breakages).
   /// Returns 'updated' or 'up_to_date'.
   Future<String> update() async {
     await _awaitReady();
     final previous = status.value;
     status.value = LocalEngineStatus(LocalEngineState.updating, version: previous.version);
     try {
-      final result = await _method.invokeMapMethod<String, dynamic>('update', {'channel': settings.updateChannel});
+      final result = await _method.invokeMapMethod<String, dynamic>('update', {'channel': 'stable'});
       settings.lastUpdateCheck = DateTime.now();
       status.value = LocalEngineStatus(LocalEngineState.ready, version: result?['version'] as String? ?? previous.version);
       return result?['status'] as String? ?? 'up_to_date';
@@ -85,13 +85,13 @@ class LocalEngine implements DownloadEngine {
         'requestId': requestId,
         'args': cookieArgs(_cookies),
       });
-      if (out == null || out.trim().isEmpty) throw EngineException('yt-dlp returned no information for this link.');
+      if (out == null || out.trim().isEmpty) throw EngineException("Couldn't find anything to download at this link.");
       return await compute(_decodeInfo, out);
     } on PlatformException catch (e) {
       if (e.code == 'CANCELED') throw EngineException.canceled();
       throw EngineException(friendlyError(e.message), detail: e.message);
     } on FormatException catch (e) {
-      throw EngineException('Could not read the information yt-dlp returned.', detail: '$e');
+      throw EngineException("Couldn't read this link.", detail: '$e');
     } finally {
       if (_activeInfoRequest == requestId) _activeInfoRequest = null;
     }
@@ -128,7 +128,7 @@ class LocalEngine implements DownloadEngine {
     }
     final file = findOutputFile(workDir);
     if (file == null) {
-      throw EngineException('yt-dlp finished but no file was produced.', detail: run.parser.lastError);
+      throw EngineException("The download finished but no file was made.", detail: run.parser.lastError);
     }
     return file;
   }

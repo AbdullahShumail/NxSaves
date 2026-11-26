@@ -63,14 +63,14 @@ class AppServices {
 
   Future<void> _startLocalEngine(LocalEngine engine, Settings settings) async {
     await engine.start();
-    // yt-dlp ships fixes for site changes every few weeks; keep it fresh automatically.
+    // Sites change often and the downloader ships fixes every few weeks; check once a day.
     final last = settings.lastUpdateCheck;
     final due = last == null || DateTime.now().difference(last) > const Duration(hours: 24);
-    if (settings.autoUpdateYtDlp && due && engine.status.value.state == LocalEngineState.ready) {
+    if (due && engine.status.value.state == LocalEngineState.ready) {
       try {
         await engine.update();
       } catch (e) {
-        debugPrint('Automatic yt-dlp update failed: $e');
+        debugPrint('Automatic engine update failed: $e');
       }
     }
   }

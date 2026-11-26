@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'src/services/app_services.dart';
-import 'src/ui/shell.dart';
+import 'src/ui/home/home_page.dart';
 import 'src/ui/theme.dart';
 
 Future<void> main() async {
@@ -32,7 +32,7 @@ class NxSavesApp extends StatelessWidget {
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
         themeMode: ThemeMode.system,
-        home: const AppShell(),
+        home: const HomePage(),
       ),
     );
   }

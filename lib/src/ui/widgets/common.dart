@@ -1,128 +1,125 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../theme.dart';
 
-/// Rounded surface used for every card in the app.
-class NxCard extends StatelessWidget {
-  const NxCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.onTap, this.highlight = false});
+/// Shrinks a little while pressed, like a physical button.
+class Pressable extends StatefulWidget {
+  const Pressable({super.key, required this.child, this.onTap, this.onLongPress, this.scale = 0.96});
 
   final Widget child;
-  final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
-  final bool highlight;
+  final VoidCallback? onLongPress;
+  final double scale;
+
+  @override
+  State<Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<Pressable> {
+  bool _down = false;
+
+  void _set(bool value) {
+    if (_down != value) setState(() => _down = value);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(22);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      decoration: BoxDecoration(
-        color: context.nx.card,
-        borderRadius: radius,
-        border: Border.all(
-          color: highlight ? NxColors.violet.withValues(alpha: 0.6) : context.nx.border,
-          width: highlight ? 1.4 : 1,
-        ),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          borderRadius: radius,
-          onTap: onTap,
-          child: Padding(padding: padding, child: child),
-        ),
+    final enabled = widget.onTap != null || widget.onLongPress != null;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: enabled ? (_) => _set(true) : null,
+      onTapUp: enabled ? (_) => _set(false) : null,
+      onTapCancel: enabled ? () => _set(false) : null,
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      child: AnimatedScale(
+        scale: _down ? widget.scale : 1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+        child: widget.child,
       ),
     );
   }
 }
 
-/// Primary call-to-action with the brand gradient, a press animation and a loading state.
-class GradientButton extends StatefulWidget {
-  const GradientButton({
+/// The main call to action: accent fill, a loading spinner and a "done" check.
+class AccentButton extends StatelessWidget {
+  const AccentButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.icon,
     this.loading = false,
-    this.height = 56,
+    this.done = false,
+    this.height = 58,
   });
 
   final String label;
   final IconData? icon;
   final VoidCallback? onPressed;
   final bool loading;
+  final bool done;
   final double height;
 
   @override
-  State<GradientButton> createState() => _GradientButtonState();
-}
-
-class _GradientButtonState extends State<GradientButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null && !widget.loading;
-    return AnimatedScale(
-      scale: _pressed ? 0.97 : 1,
-      duration: const Duration(milliseconds: 120),
+    final nx = context.nx;
+    final enabled = onPressed != null && !loading && !done;
+    final Widget content;
+    if (loading) {
+      content = SizedBox(
+        key: const ValueKey('loading'),
+        width: 22,
+        height: 22,
+        child: CircularProgressIndicator(strokeWidth: 2.4, color: nx.onAccent),
+      );
+    } else if (done) {
+      content = Icon(Icons.check_rounded, key: const ValueKey('done'), color: nx.onAccent, size: 28)
+          .animate()
+          .scale(begin: const Offset(0.4, 0.4), curve: Curves.elasticOut, duration: 600.ms);
+    } else {
+      content = Row(
+        key: ValueKey(label),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, color: nx.onAccent, size: 22), const SizedBox(width: 10)],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: nx.onAccent, fontSize: 16.5, fontWeight: FontWeight.w800, letterSpacing: -0.2),
+            ),
+          ),
+        ],
+      );
+    }
+    return Pressable(
+      onTap: enabled
+          ? () {
+              HapticFeedback.mediumImpact();
+              onPressed!();
+            }
+          : null,
       child: AnimatedOpacity(
-        opacity: widget.onPressed == null ? 0.45 : 1,
+        opacity: onPressed == null && !done ? 0.4 : 1,
         duration: const Duration(milliseconds: 200),
         child: Container(
-          height: widget.height,
-          decoration: BoxDecoration(
-            gradient: NxColors.brand,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              if (enabled)
-                BoxShadow(
-                  color: NxColors.violet.withValues(alpha: 0.35),
-                  blurRadius: 24,
-                  offset: const Offset(0, 10),
-                ),
-            ],
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: enabled ? widget.onPressed : null,
-              onHighlightChanged: (v) => setState(() => _pressed = v),
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: anim,
-                    child: ScaleTransition(scale: Tween(begin: 0.8, end: 1.0).animate(anim), child: child),
-                  ),
-                  child: widget.loading
-                      ? const SizedBox(
-                          key: ValueKey('loading'),
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
-                        )
-                      : Row(
-                          key: ValueKey(widget.label),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.icon != null) ...[
-                              Icon(widget.icon, color: Colors.white, size: 22),
-                              const SizedBox(width: 10),
-                            ],
-                            Text(
-                              widget.label,
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
+          height: height,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(color: nx.accent, borderRadius: BorderRadius.circular(18)),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: Tween(begin: 0.85, end: 1.0).animate(animation), child: child),
             ),
+            child: content,
           ),
         ),
       ),
@@ -130,71 +127,78 @@ class _GradientButtonState extends State<GradientButton> {
   }
 }
 
-/// The app mark: a gradient tile with a download arrow.
-class BrandMark extends StatelessWidget {
-  const BrandMark({super.key, this.size = 44});
+/// Rounded surface used for cards.
+class NxCard extends StatelessWidget {
+  const NxCard({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.radius = 22});
 
-  final double size;
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
+    final nx = context.nx;
     return Container(
-      width: size,
-      height: size,
+      padding: padding,
       decoration: BoxDecoration(
-        gradient: NxColors.brand,
-        borderRadius: BorderRadius.circular(size * 0.32),
-        boxShadow: [BoxShadow(color: NxColors.pink.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6))],
+        color: nx.card,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: nx.border),
       ),
-      child: Icon(Icons.south_rounded, color: Colors.white, size: size * 0.58),
+      child: child,
     );
   }
 }
 
-class Pill extends StatelessWidget {
-  const Pill({super.key, required this.label, this.icon, this.color, this.filled = false});
+/// A network or file image with a quiet placeholder; fades in when it has loaded.
+class MediaThumb extends StatelessWidget {
+  const MediaThumb({super.key, this.url, this.file, required this.icon, this.radius = 14});
 
-  final String label;
-  final IconData? icon;
-  final Color? color;
-  final bool filled;
+  final String? url;
+  final File? file;
+  final IconData icon;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? context.colors.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: filled ? Colors.black.withValues(alpha: 0.62) : c.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[Icon(icon, size: 13, color: filled ? Colors.white : c), const SizedBox(width: 4)],
-          Text(
-            label,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: filled ? Colors.white : c, height: 1.1),
-          ),
-        ],
-      ),
+    final nx = context.nx;
+    final placeholder = ColoredBox(
+      color: nx.field,
+      child: Center(child: Icon(icon, color: nx.muted, size: 22)),
+    );
+    Widget frame(BuildContext context, Widget child, int? frame, bool sync) => sync
+        ? child
+        : AnimatedOpacity(
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOut,
+            child: child,
+          );
+    Widget? image;
+    if (file != null && file!.existsSync()) {
+      image = Image.file(file!, fit: BoxFit.cover, frameBuilder: frame, errorBuilder: (_, _, _) => placeholder);
+    } else if (url != null) {
+      image = Image.network(url!, fit: BoxFit.cover, frameBuilder: frame, errorBuilder: (_, _, _) => placeholder);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Stack(fit: StackFit.expand, children: [placeholder, ?image]),
     );
   }
 }
 
-/// Progress bar with the brand gradient; animates value changes and shows a moving shimmer
-/// when the value is unknown (null).
-class NxProgressBar extends StatelessWidget {
-  const NxProgressBar({super.key, required this.value, this.height = 7, this.color});
+/// Thin progress line. A known value animates smoothly; null shows a moving sweep.
+class ProgressLine extends StatelessWidget {
+  const ProgressLine({super.key, required this.value, this.color, this.height = 5});
 
   final double? value;
-  final double height;
   final Color? color;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    final track = context.nx.field;
-    final fill = color == null ? NxColors.brand : LinearGradient(colors: [color!, color!]);
+    final nx = context.nx;
+    final fill = color ?? nx.accent;
     return ClipRRect(
       borderRadius: BorderRadius.circular(height),
       child: SizedBox(
@@ -203,20 +207,25 @@ class NxProgressBar extends StatelessWidget {
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             if (value == null) {
-              return Container(color: track)
-                  .animate(onPlay: (c) => c.repeat())
-                  .shimmer(duration: 1400.ms, colors: [track, NxColors.violet.withValues(alpha: 0.7), track]);
+              return Stack(
+                children: [
+                  Container(color: nx.field),
+                  Container(width: width * 0.3, color: fill)
+                      .animate(onPlay: (c) => c.repeat())
+                      .moveX(begin: -width * 0.3, end: width, duration: 1100.ms, curve: Curves.easeInOut),
+                ],
+              );
             }
             return Stack(
               children: [
-                Container(color: track),
+                Container(color: nx.field),
                 TweenAnimationBuilder<double>(
                   tween: Tween(end: value!.clamp(0.0, 1.0)),
-                  duration: const Duration(milliseconds: 450),
+                  duration: const Duration(milliseconds: 500),
                   curve: Curves.easeOutCubic,
                   builder: (context, v, _) => Container(
                     width: width * v,
-                    decoration: BoxDecoration(gradient: fill, borderRadius: BorderRadius.circular(height)),
+                    decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(height)),
                   ),
                 ),
               ],
@@ -228,153 +237,104 @@ class NxProgressBar extends StatelessWidget {
   }
 }
 
-/// Network or file thumbnail with a branded placeholder.
-class MediaThumb extends StatelessWidget {
-  const MediaThumb({super.key, this.url, this.file, required this.icon, this.radius = 16, this.aspectRatio});
+/// Small dark label on top of images (durations).
+class ImageTag extends StatelessWidget {
+  const ImageTag(this.label, {super.key});
 
-  final String? url;
-  final File? file;
-  final IconData icon;
-  final double radius;
-  final double? aspectRatio;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [NxColors.violet.withValues(alpha: 0.35), NxColors.pink.withValues(alpha: 0.25)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(8)),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          fontFeatures: [FontFeature.tabularFigures()],
         ),
       ),
-      child: Center(child: Icon(icon, color: Colors.white.withValues(alpha: 0.85))),
-    );
-    Widget image = placeholder;
-    Widget frame(BuildContext context, Widget child, int? frame, bool sync) => sync
-        ? child
-        : AnimatedOpacity(opacity: frame == null ? 0 : 1, duration: const Duration(milliseconds: 350), child: child);
-    if (file != null && file!.existsSync()) {
-      image = Image.file(file!, fit: BoxFit.cover, frameBuilder: frame, errorBuilder: (_, _, _) => placeholder);
-    } else if (url != null) {
-      image = Image.network(url!, fit: BoxFit.cover, frameBuilder: frame, errorBuilder: (_, _, _) => placeholder);
-    }
-    final content = ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: Stack(fit: StackFit.expand, children: [placeholder, image]),
-    );
-    return aspectRatio == null ? content : AspectRatio(aspectRatio: aspectRatio!, child: content);
-  }
-}
-
-class EmptyState extends StatelessWidget {
-  const EmptyState({super.key, required this.icon, required this.title, required this.message, this.action});
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 92,
-              height: 92,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [NxColors.violet.withValues(alpha: 0.22), NxColors.pink.withValues(alpha: 0.16)],
-                ),
-              ),
-              child: Icon(icon, size: 42, color: context.colors.primary),
-            )
-                .animate(onPlay: (c) => c.repeat(reverse: true))
-                .moveY(begin: -4, end: 4, duration: 1800.ms, curve: Curves.easeInOut),
-            const SizedBox(height: 22),
-            Text(title, style: context.text.titleLarge, textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-            Text(message, style: context.text.bodyMedium?.copyWith(color: context.nx.muted), textAlign: TextAlign.center),
-            if (action != null) ...[const SizedBox(height: 20), action!],
-          ],
-        ),
-      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.06, curve: Curves.easeOutCubic),
     );
   }
 }
 
-/// Page title block used at the top of each tab.
-class PageHeader extends StatelessWidget {
-  const PageHeader({super.key, required this.title, this.subtitle, this.trailing});
+class SectionLabel extends StatelessWidget {
+  const SectionLabel(this.label, {super.key, this.count});
 
-  final String title;
-  final String? subtitle;
-  final Widget? trailing;
+  final String label;
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
+    final nx = context.nx;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: context.text.headlineMedium),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle!, style: context.text.bodyMedium?.copyWith(color: context.nx.muted)),
-                ],
-              ],
-            ),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(color: nx.muted, fontSize: 12.5, fontWeight: FontWeight.w800, letterSpacing: 1.1),
           ),
-          ?trailing,
+          if (count != null) ...[
+            const SizedBox(width: 8),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+              child: Container(
+                key: ValueKey(count),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                decoration: BoxDecoration(color: nx.field, borderRadius: BorderRadius.circular(999)),
+                child: Text('$count', style: TextStyle(color: nx.text, fontSize: 12, fontWeight: FontWeight.w800)),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// Soft brand glow behind the top of a page.
-class GlowBackground extends StatelessWidget {
-  const GlowBackground({super.key, required this.child});
+/// Round icon button with a press animation.
+class RoundIconButton extends StatelessWidget {
+  const RoundIconButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+    this.size = 40,
+    this.filled = false,
+    this.color,
+  });
 
-  final Widget child;
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String? tooltip;
+  final double size;
+  final bool filled;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Stack(
-      children: [
-        Positioned(
-          top: -160,
-          left: -80,
-          right: -80,
-          height: 380,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  colors: [
-                    NxColors.violet.withValues(alpha: dark ? 0.30 : 0.16),
-                    NxColors.pink.withValues(alpha: dark ? 0.10 : 0.06),
-                    Colors.transparent,
-                  ],
-                  stops: const [0, 0.45, 1],
-                ),
-              ),
-            ),
-          ),
-        ),
-        child,
-      ],
+    final nx = context.nx;
+    final button = Pressable(
+      scale: 0.88,
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            },
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: filled ? nx.accent : nx.field, shape: BoxShape.circle),
+        child: Icon(icon, size: size * 0.5, color: color ?? (filled ? nx.onAccent : nx.text)),
+      ),
     );
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
 
@@ -382,51 +342,96 @@ void showSnack(BuildContext context, String message, {String? actionLabel, VoidC
   final messenger = ScaffoldMessenger.of(context);
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(SnackBar(
-    content: Text(message),
+    content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
     // Snackbars with an action persist by default since Flutter 3.32; these are just notices.
     persist: false,
-    duration: const Duration(seconds: 4),
+    duration: const Duration(seconds: 3),
     action: actionLabel == null ? null : SnackBarAction(label: actionLabel, onPressed: onAction ?? () {}),
   ));
 }
 
-/// Bottom sheet showing an error message and the raw yt-dlp output behind it.
-Future<void> showErrorDetails(BuildContext context, {required String message, String? detail}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('What went wrong', style: context.text.titleLarge),
-            const SizedBox(height: 10),
-            Text(message, style: context.text.bodyLarge),
-            if (detail != null && detail.trim().isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('Details', style: context.text.titleSmall?.copyWith(color: context.nx.muted)),
-              const SizedBox(height: 6),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: context.nx.field, borderRadius: BorderRadius.circular(14)),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      detail.trim(),
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.35),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
+/// A sliver list that animates items in and out when [items] changes, matched by [idOf].
+class AnimatedSliverItems<T> extends StatefulWidget {
+  const AnimatedSliverItems({super.key, required this.items, required this.idOf, required this.itemBuilder});
+
+  final List<T> items;
+  final String Function(T item) idOf;
+  final Widget Function(BuildContext context, T item) itemBuilder;
+
+  @override
+  State<AnimatedSliverItems<T>> createState() => _AnimatedSliverItemsState<T>();
+}
+
+class _AnimatedSliverItemsState<T> extends State<AnimatedSliverItems<T>> {
+  final _listKey = GlobalKey<SliverAnimatedListState>();
+  late List<T> _items = List.of(widget.items);
+
+  @override
+  void didUpdateWidget(AnimatedSliverItems<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final list = _listKey.currentState;
+    final next = widget.items;
+    final nextIds = {for (final item in next) widget.idOf(item)};
+    final current = List.of(_items);
+    for (var i = current.length - 1; i >= 0; i--) {
+      final old = current[i];
+      if (!nextIds.contains(widget.idOf(old))) {
+        current.removeAt(i);
+        list?.removeItem(
+          i,
+          (context, animation) => _transition(animation, widget.itemBuilder(context, old)),
+          duration: const Duration(milliseconds: 320),
+        );
+      }
+    }
+    final currentIds = {for (final item in current) widget.idOf(item)};
+    for (var i = 0; i < next.length; i++) {
+      if (!currentIds.contains(widget.idOf(next[i]))) {
+        list?.insertItem(i, duration: const Duration(milliseconds: 420));
+      }
+    }
+    _items = List.of(next);
+  }
+
+  Widget _transition(Animation<double> animation, Widget child) {
+    final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+    return SizeTransition(
+      sizeFactor: curved,
+      child: FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.15), end: Offset.zero).animate(curved),
+          child: child,
         ),
       ),
-    ),
-  );
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverAnimatedList(
+      key: _listKey,
+      initialItemCount: _items.length,
+      itemBuilder: (context, index, animation) =>
+          _transition(animation, widget.itemBuilder(context, _items[index])),
+    );
+  }
+}
+
+/// Gray placeholder block with a light sweep, used while a link is being read.
+class SkeletonBlock extends StatelessWidget {
+  const SkeletonBlock({super.key, this.width, required this.height, this.radius = 10});
+
+  final double? width;
+  final double height;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(color: context.nx.field, borderRadius: BorderRadius.circular(radius)),
+    );
+  }
 }

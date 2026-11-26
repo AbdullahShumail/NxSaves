@@ -10,8 +10,8 @@ import '../core/progress_parser.dart';
 import '../services/settings.dart';
 import 'engine.dart';
 
-/// Talks to your self-hosted NxSaves server (server/nxsaves_server.py), which runs yt-dlp +
-/// ffmpeg. Used on iOS (required) and optionally on Android.
+/// Talks to your self-hosted NxSaves server (server/nxsaves_server.py), which does the downloading
+/// and sends the finished file to the phone. Used on iOS.
 class RemoteEngine implements DownloadEngine {
   RemoteEngine(this.settings);
 
@@ -26,7 +26,7 @@ class RemoteEngine implements DownloadEngine {
 
   Uri _uri(String path) {
     final base = settings.serverUrl.trim();
-    if (base.isEmpty) throw EngineException('Add your NxSaves server address in Settings first.');
+    if (base.isEmpty) throw EngineException('Connect your NxSaves server in Settings first.');
     final normalized = base.contains('://') ? base : 'http://$base';
     final root = Uri.tryParse(normalized.endsWith('/') ? normalized : '$normalized/');
     if (root == null || root.host.isEmpty) throw EngineException('The server address in Settings is not valid.');
@@ -57,7 +57,7 @@ class RemoteEngine implements DownloadEngine {
       throw EngineException("The server didn't answer in time.", detail: '$method $path timed out');
     } on SocketException catch (e) {
       throw EngineException(
-        "Can't reach your NxSaves server. Check the address and that the server is running.",
+        "Can't reach your NxSaves server. Make sure it's running.",
         detail: '$e',
       );
     } on HandshakeException catch (e) {
@@ -102,7 +102,7 @@ class RemoteEngine implements DownloadEngine {
     _stopped.remove(task.id);
     await workDir.create(recursive: true);
     task.remoteJobId ??= await _createJob(task);
-    onProgress(const TaskProgress(stage: 'Queued on server'));
+    onProgress(const TaskProgress(stage: 'Waiting'));
 
     var recreated = false;
     var failures = 0;
@@ -136,7 +136,7 @@ class RemoteEngine implements DownloadEngine {
       }
       if (status == 'canceled') throw EngineException.canceled();
       onProgress(TaskProgress(
-        stage: 'Server · ${job['stage'] ?? 'Working'}',
+        stage: '${job['stage'] ?? 'Working'}',
         fraction: asDouble(job['progress']),
         downloaded: asInt(job['downloaded']),
         total: asInt(job['total']),

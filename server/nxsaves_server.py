@@ -327,7 +327,7 @@ def run_job(job: Job) -> None:
             raise DownloadCancelled("Canceled")
         output = find_output(job.dir)
         if code != 0 or output is None:
-            raise RuntimeError(logger.last_error or "yt-dlp finished without producing a file")
+            raise RuntimeError(logger.last_error or "The download finished but no file was made.")
         job.set(status="ready", stage="Ready", progress=1.0, speed=None, eta=None,
                 filename=output.name, path=output, size=output.stat().st_size)
         log.info("job %s ready: %s (%d bytes)", job.id, output.name, job.size)
@@ -429,7 +429,7 @@ def info(request: InfoRequest) -> dict[str, Any]:
     except yt_dlp.utils.DownloadError as exc:
         raise HTTPException(422, logger.last_error or str(exc)) from exc
     if not data:
-        raise HTTPException(422, logger.last_error or "yt-dlp returned no information for this link.")
+        raise HTTPException(422, logger.last_error or "Couldn't find anything to download at this link.")
     return trim_info(data)
 
 

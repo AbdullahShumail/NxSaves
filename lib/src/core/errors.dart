@@ -1,3 +1,5 @@
+import 'dart:io';
+
 class EngineException implements Exception {
   EngineException(this.message, {this.detail, this.canceled = false, this.statusCode});
 
@@ -12,7 +14,7 @@ class EngineException implements Exception {
   String toString() => message;
 }
 
-/// Picks the most useful line out of yt-dlp's stderr.
+/// Picks the most useful line out of the downloader's error output.
 String lastErrorLine(String raw) {
   final lines = raw.split(RegExp(r'[\r\n]+')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
   for (final line in lines.reversed) {
@@ -21,20 +23,22 @@ String lastErrorLine(String raw) {
   return lines.isEmpty ? raw.trim() : lines.last;
 }
 
-/// Maps raw yt-dlp / network errors to a message a person can act on.
+/// Maps raw downloader / network errors to a short message a person can act on.
 String friendlyError(String? raw) {
   if (raw == null || raw.trim().isEmpty) return 'Something went wrong.';
   final text = raw.toLowerCase();
   bool has(String s) => text.contains(s);
+  // Cookies can only be added on Android; on iPhone they live on the server.
+  final cookiesHint = Platform.isIOS ? '' : ' Add sign-in cookies in Settings.';
 
   if (has('unsupported url')) {
-    return "This link isn't supported. Paste a link to a single video or post.";
+    return "This link isn't supported. Use a link to a single video or post.";
   }
   if (has('not a bot') || has('confirm you’re not a bot') || has("confirm you're not a bot")) {
-    return 'YouTube wants to confirm you’re not a bot. Wait a bit, update yt-dlp in Settings, or add a cookies file.';
+    return 'YouTube wants to confirm you’re not a bot. Try again in a few minutes.$cookiesHint';
   }
   if (has('sign in to confirm your age') || has('age-restricted') || has('inappropriate for some users')) {
-    return 'This video is age-restricted. It needs a cookies file from a signed-in account (Settings → Cookies).';
+    return 'This video is age-restricted.$cookiesHint';
   }
   if (has('private video') || has('this video is private')) return 'This video is private.';
   if (has('members-only') || has('join this channel')) return 'This video is for channel members only.';
@@ -44,19 +48,19 @@ String friendlyError(String? raw) {
       has('requires authentication') ||
       has('use --cookies') ||
       has('cookies-from-browser')) {
-    return 'The site requires a logged-in account for this. Add a cookies file in Settings and retry.';
+    return 'This post needs a logged-in account.$cookiesHint';
   }
   if (has('http error 429') || has('too many requests')) {
-    return 'The site is rate-limiting requests. Wait a few minutes and try again.';
+    return 'The site is busy. Wait a few minutes and try again.';
   }
   if (has('drm protect') || has('drm-protect') || has('use drm')) {
-    return "This video is DRM-protected and can't be downloaded.";
+    return "This video is protected and can't be downloaded.";
   }
   if (has('is live') || has('live event will begin') || has('premieres in') || has('this live event')) {
-    return "Live streams and upcoming premieres can't be downloaded until they end.";
+    return 'Live streams can be saved once they have ended.';
   }
   if (has('requested format is not available')) {
-    return "That quality isn't available for this video. Pick another one.";
+    return "That quality isn't available. Pick another one.";
   }
   if (has('video unavailable') ||
       has('this video is unavailable') ||
@@ -65,7 +69,7 @@ String friendlyError(String? raw) {
       has('not available in your country') ||
       has('http error 404') ||
       has('http error 410')) {
-    return 'This video is unavailable (removed, private, or blocked in your region).';
+    return 'This video is unavailable.';
   }
   if (has('no space left') || has('enospc')) return 'Not enough free storage on this device.';
   if (has('unable to download webpage') ||
@@ -83,6 +87,11 @@ String friendlyError(String? raw) {
       has('certificate_verify_failed')) {
     return 'Network problem. Check your connection and try again.';
   }
-  final line = lastErrorLine(raw).replaceFirst(RegExp(r'^\[[^\]]+\] [^:]+: '), '');
-  return line.length > 220 ? '${line.substring(0, 217)}…' : line;
+  var line = lastErrorLine(raw).replaceFirst(RegExp(r'^\[[^\]]+\] [^:]+: '), '');
+  // Drop the tool's own advice ("; please report this issue on …", "See https://…", "Use --flag").
+  line = line.split(RegExp(r';\s*please report|\s(?:See|Use)\s+(?:https?://|--)', caseSensitive: false)).first.trim();
+  if (line.isEmpty || RegExp(r'yt-?dlp|youtube-?dl|https?://|--\w', caseSensitive: false).hasMatch(line)) {
+    return "Couldn't download this. Try again later.";
+  }
+  return line.length > 160 ? '${line.substring(0, 157)}…' : line;
 }

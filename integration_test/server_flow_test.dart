@@ -9,7 +9,7 @@ import 'package:nxsaves/src/services/app_services.dart';
 
 /// End to end through the real UI: paste a link, let an NxSaves server read and download it, and
 /// check the finished file landed in the library (Documents on iOS, shared storage on Android).
-/// This is the path the iPhone app uses; CI runs it on the iOS simulator (.github/workflows/ios-check.yml).
+/// This is the path the iPhone app uses.
 ///
 /// ```sh
 /// flutter test integration_test -d DEVICE \
@@ -31,7 +31,7 @@ void main() {
     expect(_server, isNotEmpty, reason: 'Pass --dart-define=NXSAVES_TEST_SERVER=http://host:port');
     final services = await AppServices.create();
     services.settings
-      ..engine = EngineKind.remote
+      ..engineOverride = EngineKind.remote
       ..serverUrl = _server
       ..serverToken = _token
       ..autoSaveToPhotos = false;
@@ -73,8 +73,7 @@ void main() {
     expect(item.sizeBytes, greaterThan(100 * 1024));
     expect(item.kind, MediaKind.video);
 
-    // Leave the Library on screen for the CI screenshots.
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Library')));
+    // Leave the saved file on screen for screenshots.
     await tester.pump(const Duration(seconds: 3));
   }, timeout: const Timeout(Duration(minutes: 8)));
 }

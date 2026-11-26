@@ -1,6 +1,6 @@
 import 'models.dart';
 
-/// A choice shown in the quality picker, built from the formats yt-dlp actually reported.
+/// A choice shown in the quality picker, built from the formats the site actually offers.
 class QualityOption {
   const QualityOption({
     required this.spec,
@@ -9,6 +9,7 @@ class QualityOption {
     this.detail = '',
     this.approxBytes,
     this.compatible = true,
+    this.fps,
   });
 
   final DownloadSpec spec;
@@ -19,6 +20,9 @@ class QualityOption {
 
   /// False when only VP9/AV1 exists at this resolution (may not play in iOS Photos or old phones).
   final bool compatible;
+
+  /// Frame rate when it is above 30 (e.g. 60), else null.
+  final int? fps;
 }
 
 String? resolutionBadge(int res) {
@@ -143,6 +147,7 @@ List<QualityOption> buildVideoOptions(MediaInfo info, {required bool preferCompa
           detail: parts.join(' · '),
           approxBytes: videoBytes == null || audioBytes == null ? null : videoBytes + audioBytes,
           compatible: candidates.any((f) => f.isH264) || pick.codecFamily.isEmpty,
+          fps: fps > 31 ? fps.round() : null,
         );
       }(),
   ];

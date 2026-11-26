@@ -1,0 +1,41 @@
+# Builds the iOS app on a cloud Mac and uploads it to TestFlight.
+# One-time setup is in README.md ("iPhone: TestFlight through Codemagic").
+workflows:
+  ios-testflight:
+    name: iOS to TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # The same App Store Connect API key the Gallery app uses (Team settings → Integrations).
+      app_store_connect: codemagic_asc_key
+    environment:
+      flutter: 3.47.2
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.nxsaves.app
+    scripts:
+      - name: Get packages
+        script: flutter pub get
+      - name: Analyze
+        script: flutter analyze --no-fatal-infos
+      - name: Unit tests
+        script: flutter test
+      - name: Use signing profiles
+        # Internal testing only: the build can go to testers on your App Store Connect team,
+        # never to external testing or the App Store.
+        script: xcode-project use-profiles --custom-export-options='{"testFlightInternalTestingOnly": true}'
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \
+            --build-number=$PROJECT_BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Testers on your Apple team get each build in TestFlight with no review.
+        submit_to_testflight: false

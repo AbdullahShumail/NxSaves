@@ -1,174 +1,201 @@
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 abstract final class NxColors {
-  static const violet = Color(0xFF7B61FF);
-  static const pink = Color(0xFFFF4F9A);
-  static const teal = Color(0xFF2DD4BF);
+  static const lime = Color(0xFFD4FF3A);
+  static const ink = Color(0xFF111115);
+  static const red = Color(0xFFFF5A5F);
   static const amber = Color(0xFFFFB547);
-  static const red = Color(0xFFFF5D6C);
-
-  static const brand = LinearGradient(
-    colors: [violet, pink],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  static const green = Color(0xFF34D399);
 }
 
-/// Extra colors the Material scheme doesn't cover.
+/// The app's colors. Dark mode uses lime as the accent; light mode uses ink with lime on top,
+/// because lime text or lines on white are hard to see.
 class NxPalette extends ThemeExtension<NxPalette> {
-  const NxPalette({required this.card, required this.border, required this.muted, required this.field});
+  const NxPalette({
+    required this.background,
+    required this.card,
+    required this.field,
+    required this.border,
+    required this.text,
+    required this.muted,
+    required this.accent,
+    required this.onAccent,
+  });
 
+  final Color background;
   final Color card;
-  final Color border;
-  final Color muted;
   final Color field;
+  final Color border;
+  final Color text;
+  final Color muted;
+  final Color accent;
+  final Color onAccent;
 
   static const dark = NxPalette(
-    card: Color(0xFF15151F),
-    border: Color(0x14FFFFFF),
-    muted: Color(0xFF9A9AB0),
-    field: Color(0xFF1C1C28),
+    background: Color(0xFF0B0B0E),
+    card: Color(0xFF16161B),
+    field: Color(0xFF202027),
+    border: Color(0x12FFFFFF),
+    text: Color(0xFFF5F5F7),
+    muted: Color(0xFF8E8E9A),
+    accent: NxColors.lime,
+    onAccent: Color(0xFF0B0B0E),
   );
 
   static const light = NxPalette(
+    background: Color(0xFFF4F4F1),
     card: Colors.white,
+    field: Color(0xFFEBEBE6),
     border: Color(0x14000000),
-    muted: Color(0xFF6B6B80),
-    field: Color(0xFFF1F1F7),
+    text: NxColors.ink,
+    muted: Color(0xFF6E6E78),
+    accent: NxColors.ink,
+    onAccent: NxColors.lime,
   );
 
   @override
-  NxPalette copyWith({Color? card, Color? border, Color? muted, Color? field}) => NxPalette(
+  NxPalette copyWith({
+    Color? background,
+    Color? card,
+    Color? field,
+    Color? border,
+    Color? text,
+    Color? muted,
+    Color? accent,
+    Color? onAccent,
+  }) =>
+      NxPalette(
+        background: background ?? this.background,
         card: card ?? this.card,
-        border: border ?? this.border,
-        muted: muted ?? this.muted,
         field: field ?? this.field,
+        border: border ?? this.border,
+        text: text ?? this.text,
+        muted: muted ?? this.muted,
+        accent: accent ?? this.accent,
+        onAccent: onAccent ?? this.onAccent,
       );
 
   @override
   NxPalette lerp(NxPalette? other, double t) {
     if (other == null) return this;
     return NxPalette(
+      background: Color.lerp(background, other.background, t)!,
       card: Color.lerp(card, other.card, t)!,
-      border: Color.lerp(border, other.border, t)!,
-      muted: Color.lerp(muted, other.muted, t)!,
       field: Color.lerp(field, other.field, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      text: Color.lerp(text, other.text, t)!,
+      muted: Color.lerp(muted, other.muted, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+      onAccent: Color.lerp(onAccent, other.onAccent, t)!,
     );
   }
 }
 
 extension NxThemeContext on BuildContext {
   NxPalette get nx => Theme.of(this).extension<NxPalette>()!;
-  ColorScheme get colors => Theme.of(this).colorScheme;
   TextTheme get text => Theme.of(this).textTheme;
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
 }
 
 ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
-  final palette = dark ? NxPalette.dark : NxPalette.light;
-  final background = dark ? const Color(0xFF0A0A10) : const Color(0xFFF5F5FA);
-  final scheme = ColorScheme.fromSeed(seedColor: NxColors.violet, brightness: brightness).copyWith(
-    primary: dark ? const Color(0xFFA493FF) : NxColors.violet,
-    onPrimary: Colors.white,
-    secondary: NxColors.pink,
-    tertiary: NxColors.teal,
+  final p = dark ? NxPalette.dark : NxPalette.light;
+  final scheme = ColorScheme.fromSeed(seedColor: NxColors.lime, brightness: brightness).copyWith(
+    primary: p.accent,
+    onPrimary: p.onAccent,
+    secondary: p.accent,
+    onSecondary: p.onAccent,
     error: NxColors.red,
-    surface: background,
-    onSurfaceVariant: palette.muted,
+    surface: p.background,
+    onSurface: p.text,
+    onSurfaceVariant: p.muted,
+    outline: p.border,
   );
 
   final base = ThemeData(colorScheme: scheme, brightness: brightness, useMaterial3: true);
-  final text = base.textTheme.copyWith(
-    displaySmall: base.textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1),
-    headlineMedium: base.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.8),
-    headlineSmall: base.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5),
-    titleLarge: base.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.3),
-    titleMedium: base.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-    titleSmall: base.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-    labelLarge: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+  final t = base.textTheme.apply(bodyColor: p.text, displayColor: p.text);
+  final text = t.copyWith(
+    headlineLarge: t.headlineLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.2),
+    headlineMedium: t.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1),
+    headlineSmall: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6),
+    titleLarge: t.titleLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.4),
+    titleMedium: t.titleMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.2),
+    titleSmall: t.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+    labelLarge: t.labelLarge?.copyWith(fontWeight: FontWeight.w700),
   );
 
   return base.copyWith(
-    scaffoldBackgroundColor: background,
+    scaffoldBackgroundColor: p.background,
+    canvasColor: p.background,
     textTheme: text,
-    extensions: [palette],
-    splashFactory: InkSparkle.splashFactory,
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: dark ? const Color(0xFF101017) : Colors.white,
+    extensions: [p],
+    splashFactory: NoSplash.splashFactory,
+    highlightColor: Colors.transparent,
+    appBarTheme: AppBarTheme(
+      backgroundColor: p.background,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: NxColors.violet.withValues(alpha: dark ? 0.28 : 0.14),
-      height: 70,
       elevation: 0,
-      labelTextStyle: WidgetStateProperty.resolveWith(
-        (states) => TextStyle(
-          fontSize: 12,
-          fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
-          color: states.contains(WidgetState.selected) ? scheme.onSurface : palette.muted,
-        ),
-      ),
-      iconTheme: WidgetStateProperty.resolveWith(
-        (states) => IconThemeData(
-          color: states.contains(WidgetState.selected) ? scheme.primary : palette.muted,
-        ),
-      ),
+      systemOverlayStyle: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: palette.field,
+      fillColor: p.field,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+        borderSide: BorderSide(color: p.accent, width: 1.5),
       ),
-      hintStyle: TextStyle(color: palette.muted),
+      hintStyle: TextStyle(color: p.muted),
+      labelStyle: TextStyle(color: p.muted),
+    ),
+    textSelectionTheme: TextSelectionThemeData(
+      cursorColor: dark ? NxColors.lime : NxColors.ink,
+      selectionColor: NxColors.lime.withValues(alpha: 0.35),
+      selectionHandleColor: dark ? NxColors.lime : NxColors.ink,
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: dark ? const Color(0xFF26263A) : const Color(0xFF1E1E2C),
-      contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-      actionTextColor: const Color(0xFFC6BBFF),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      backgroundColor: dark ? const Color(0xFF26262E) : NxColors.ink,
+      contentTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      actionTextColor: NxColors.lime,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     ),
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: palette.card,
+      backgroundColor: p.card,
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      dragHandleColor: p.muted.withValues(alpha: 0.4),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: palette.card,
+      backgroundColor: p.card,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     ),
-    segmentedButtonTheme: SegmentedButtonThemeData(
-      style: ButtonStyle(
-        visualDensity: VisualDensity.standard,
-        side: WidgetStatePropertyAll(BorderSide(color: palette.border)),
-        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? NxColors.violet.withValues(alpha: dark ? 0.3 : 0.14)
-              : palette.field,
-        ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: p.accent,
+        foregroundColor: p.onAccent,
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
-    switchTheme: SwitchThemeData(
-      trackColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? NxColors.violet : palette.field,
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: p.text,
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
       ),
-      thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? Colors.white : palette.muted,
-      ),
-      trackOutlineColor: WidgetStatePropertyAll(palette.border),
     ),
-    dividerTheme: DividerThemeData(color: palette.border, space: 1),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: p.accent),
+    dividerTheme: DividerThemeData(color: p.border, space: 1, thickness: 1),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
       },
     ),

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/errors.dart';
@@ -9,7 +11,7 @@ import '../../services/app_services.dart';
 
 enum FetchState { idle, loading, loaded, failed }
 
-/// State of the Download tab: the link being analyzed and the chosen quality.
+/// The link being read and the quality picked for it.
 class HomeController extends ChangeNotifier {
   HomeController(this.services);
 
@@ -28,10 +30,14 @@ class HomeController extends ChangeNotifier {
 
   List<QualityOption> get options => kind == MediaKind.video ? videoOptions : audioOptions;
 
+  /// True when the last error can be fixed in Settings (server address or token).
+  bool get errorNeedsSettings => error != null && (error!.contains('Settings') || error!.contains('server'));
+
   Future<void> fetch(String input) async {
     final link = extractUrl(input);
     if (link == null) {
-      _fail("That doesn't look like a link. Copy the video's share link and paste it here.");
+      url = null;
+      _fail("That doesn't look like a link.");
       return;
     }
     final seq = ++_seq;
@@ -49,11 +55,11 @@ class HomeController extends ChangeNotifier {
       if (seq != _seq) return;
       final media = MediaInfo.fromJson(json, sourceUrl: link);
       if (media.isLive) {
-        _fail("This is a live stream (or hasn't started yet). It can be downloaded once it has ended.");
+        _fail('Live streams can be saved once they have ended.');
         return;
       }
       if (media.isPlaylist && media.entries.isEmpty) {
-        _fail('This playlist or profile has no downloadable videos.');
+        _fail('Nothing to download here.');
         return;
       }
       info = media;
@@ -65,21 +71,32 @@ class HomeController extends ChangeNotifier {
       _fail(e.message, detail: e.detail);
     } catch (e) {
       if (seq != _seq) return;
-      _fail('Could not read this link.', detail: '$e');
+      _fail("Couldn't read this link.", detail: '$e');
     }
+  }
+
+  void retry() {
+    final link = url;
+    if (link != null) fetch(link);
   }
 
   void _buildOptions() {
     final media = info!;
     final settings = services.settings;
     if (media.isPlaylist) {
-      videoOptions = genericVideoOptions(preferCompat: settings.preferCompat);
+      // Above 1080p (and "Best") usually means VP9/AV1, which Photos on iPhone can't take.
+      videoOptions = genericVideoOptions(preferCompat: true)
+          .where((o) => (o.spec.height ?? 0) <= 1080 && !(Platform.isIOS && o.spec.height == null))
+          .toList();
       audioOptions = const [
-        QualityOption(spec: DownloadSpec(kind: MediaKind.audio, audioFormat: AudioFormat.mp3), title: 'MP3', badge: 'Universal'),
-        QualityOption(spec: DownloadSpec(kind: MediaKind.audio, audioFormat: AudioFormat.m4a), title: 'M4A', badge: 'Original'),
+        QualityOption(spec: DownloadSpec(kind: MediaKind.audio, audioFormat: AudioFormat.mp3), title: 'MP3'),
+        QualityOption(spec: DownloadSpec(kind: MediaKind.audio, audioFormat: AudioFormat.m4a), title: 'M4A'),
       ];
     } else {
-      videoOptions = buildVideoOptions(media, preferCompat: settings.preferCompat);
+      var video = buildVideoOptions(media, preferCompat: true);
+      // Photos on iPhone can't take VP9/AV1, which is all YouTube has above 1080p.
+      if (Platform.isIOS && video.any((o) => o.compatible)) video = video.where((o) => o.compatible).toList();
+      videoOptions = video;
       audioOptions = buildAudioOptions(media);
     }
     final wantsAudio = settings.defaultKind == MediaKind.audio && audioOptions.isNotEmpty;
@@ -110,11 +127,13 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Adds the analyzed link (or every playlist entry) to the queue. Returns how many were added.
+  /// Adds the link (or every playlist entry) to the downloads and remembers the choice for next
+  /// time. Returns how many were added.
   int enqueue() {
     final media = info;
     final option = selected;
     if (media == null || option == null) return 0;
+    _remember(option.spec);
     final downloads = services.downloads;
     if (media.isPlaylist) {
       for (final entry in media.entries) {
@@ -140,6 +159,16 @@ class HomeController extends ChangeNotifier {
       extractor: media.extractor,
     );
     return 1;
+  }
+
+  void _remember(DownloadSpec spec) {
+    final settings = services.settings;
+    settings.defaultKind = spec.kind;
+    if (spec.kind == MediaKind.audio) {
+      settings.defaultAudioFormat = spec.audioFormat;
+    } else {
+      settings.defaultHeight = spec.height ?? 0;
+    }
   }
 
   void reset() {
