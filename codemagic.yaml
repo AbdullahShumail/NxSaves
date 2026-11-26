@@ -25,7 +25,8 @@ workflows:
       - name: Use signing profiles
         # Internal testing only: the build can go to testers on your App Store Connect team,
         # never to external testing or the App Store.
-        script: xcode-project use-profiles --custom-export-options='{"testFlightInternalTestingOnly": true}'
+        script: |
+          xcode-project use-profiles --custom-export-options='{"testFlightInternalTestingOnly": true}'
       - name: Build IPA
         script: |
           flutter build ipa --release \
