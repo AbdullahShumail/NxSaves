@@ -32,6 +32,8 @@
 	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>NxSaves adds the videos you download to your Photos library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>NxSaves needs access to Photos to save the videos you download there.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>NxSaves connects to your NxSaves server when it runs on your home network.</string>
 	<key>NSAppTransportSecurity</key>
