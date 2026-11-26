@@ -28,6 +28,7 @@ import re
 import secrets
 import shutil
 import socket
+import subprocess
 import threading
 import time
 import uuid
@@ -55,6 +56,7 @@ WORKERS = max(1, int(os.environ.get("NXSAVES_WORKERS", "2")))
 JOB_TTL = float(os.environ.get("NXSAVES_JOB_TTL_HOURS", "6")) * 3600
 COOKIES = os.environ.get("NXSAVES_COOKIES") or None
 FFMPEG = os.environ.get("NXSAVES_FFMPEG") or shutil.which("ffmpeg")
+FFPROBE = shutil.which("ffprobe") or (str(Path(FFMPEG).with_name("ffprobe" + Path(FFMPEG).suffix)) if FFMPEG else None)
 
 
 def load_token() -> str:
@@ -111,7 +113,9 @@ def format_sort(spec: Spec) -> str:
 
 def spec_args(spec: Spec) -> list[str]:
     if spec.kind == "video":
-        return ["-f", "bv*+ba/b", "-S", format_sort(spec), "--merge-output-format", "mp4"]
+        # iPhones only play H.264/HEVC, so take H.264 whenever the site has it at any size.
+        fmt = "bv*[vcodec^=avc1]+ba/b[vcodec^=avc1]/bv*+ba/b" if spec.preferCompat else "bv*+ba/b"
+        return ["-f", fmt, "-S", format_sort(spec), "--merge-output-format", "mp4"]
     return [
         "-f", "ba[ext=m4a]/ba/b" if spec.audioFormat == "m4a" else "ba/b",
         "-x", "--audio-format", spec.audioFormat, "--audio-quality", "0",
@@ -305,6 +309,29 @@ def find_output(folder: Path) -> Optional[Path]:
     return max(files, key=lambda f: f.stat().st_size) if files else None
 
 
+def video_codec(path: Path) -> str:
+    out = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name",
+                          "-of", "csv=p=0", str(path)], capture_output=True, text=True, timeout=120)
+    return out.stdout.strip().lower()
+
+
+def make_iphone_playable(job: Job, path: Path) -> Path:
+    """Re-encodes VP9/AV1 (common on Instagram and YouTube) to H.264, which every iPhone plays."""
+    if not FFMPEG or not FFPROBE or not Path(FFPROBE).exists() and not shutil.which("ffprobe"):
+        return path
+    if video_codec(path) in ("", "h264", "hevc"):
+        return path
+    job.set(status="processing", stage="Converting for iPhone", progress=None, speed=None, eta=None)
+    converted = path.with_name(path.stem + ".h264.tmp.mp4")
+    subprocess.run([FFMPEG, "-y", "-v", "error", "-i", str(path), "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+                    str(converted)], check=True, capture_output=True, timeout=3600)
+    path.unlink()
+    final = path.with_suffix(".mp4")
+    converted.rename(final)
+    return final
+
+
 def run_job(job: Job) -> None:
     if job.cancel.is_set():
         job.set(status="canceled", stage="Canceled")
@@ -328,6 +355,8 @@ def run_job(job: Job) -> None:
         output = find_output(job.dir)
         if code != 0 or output is None:
             raise RuntimeError(logger.last_error or "The download finished but no file was made.")
+        if job.spec.kind == "video" and job.spec.preferCompat:
+            output = make_iphone_playable(job, output)
         job.set(status="ready", stage="Ready", progress=1.0, speed=None, eta=None,
                 filename=output.name, path=output, size=output.stat().st_size)
         log.info("job %s ready: %s (%d bytes)", job.id, output.name, job.size)
